@@ -1,5 +1,6 @@
 #include "LocalServer.h"
 #include "chdb.h"
+#include "query_result.h"
 
 #include <sys/resource.h>
 #include <Common/logger_useful.h>
@@ -17,7 +18,6 @@
 #include <Interpreters/ProcessList.h>
 #include <Interpreters/loadMetadata.h>
 #include <base/getFQDNOrHostName.h>
-#include <Common/scope_guard_safe.h>
 #include <Interpreters/Session.h>
 #include <Access/AccessControl.h>
 #include <Common/Exception.h>
@@ -30,13 +30,10 @@
 #include <Common/quoteString.h>
 #include <Common/randomSeed.h>
 #include <Common/ThreadPool.h>
-#include <Loggers/Loggers.h>
 #include <IO/ReadBufferFromFile.h>
-#include <IO/ReadBufferFromString.h>
 #include <IO/WriteBufferFromFileDescriptor.h>
 #include <IO/UseSSL.h>
 #include <IO/SharedThreadPools.h>
-#include <Parsers/IAST.h>
 #include <Parsers/ASTInsertQuery.h>
 #include <Common/ErrorHandlers.h>
 #include <Functions/UserDefined/IUserDefinedSQLObjectsLoader.h>
@@ -52,6 +49,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <base/argsToConfig.h>
 #include <filesystem>
+#include <memory>
 
 #if defined(FUZZING_MODE)
     #include <Functions/getFuzzerData.h>
@@ -536,14 +534,14 @@ catch (const DB::Exception & e)
     cleanup();
 
     bool need_print_stack_trace = config().getBool("stacktrace", false);
-    std::cerr << getExceptionMessage(e, need_print_stack_trace, true) << std::endl;
+    error_message_oss << getExceptionMessage(e, need_print_stack_trace, true);
     return e.code() ? e.code() : -1;
 }
 catch (...)
 {
     cleanup();
 
-    std::cerr << getCurrentExceptionMessage(false) << std::endl;
+    error_message_oss << getCurrentExceptionMessage(false);
     return getCurrentExceptionCode();
 }
 
@@ -933,14 +931,6 @@ void LocalServer::readArguments(int argc, char ** argv, Arguments & common_argum
 //     }
 // }
 
-class query_result_
-{
-public:
-    uint64_t rows;
-    uint64_t bytes;
-    double elapsed;
-    std::vector<char> * buf;
-};
 
 std::unique_ptr<query_result_> pyEntryClickHouseLocal(int argc, char ** argv)
 {
@@ -951,18 +941,13 @@ std::unique_ptr<query_result_> pyEntryClickHouseLocal(int argc, char ** argv)
         int ret = app.run();
         if (ret == 0)
         {
-            auto result = std::make_unique<query_result_>();
-            result->buf = app.getQueryOutputVector();
-            result->rows = app.getProcessedRows();
-            result->bytes = app.getProcessedBytes();
-            result->elapsed = app.getElapsedTime();
-
-            // std::cerr << std::string(out->begin(), out->end()) << std::endl;
-            return result;
-        }
-        else
-        {
-            return nullptr;
+            return std::make_unique<query_result_>(
+                app.getQueryOutputVector(),
+                app.getProcessedRows(),
+                app.getProcessedBytes(),
+                app.getElapsedTime());
+        } else {
+            return std::make_unique<query_result_>(app.get_error_msg());
         }
     }
     catch (const DB::Exception & e)
@@ -984,29 +969,23 @@ std::unique_ptr<query_result_> pyEntryClickHouseLocal(int argc, char ** argv)
 local_result * query_stable(int argc, char ** argv)
 {
     auto result = pyEntryClickHouseLocal(argc, argv);
-    if (!result || !result->buf)
+    if (!result)
     {
         return nullptr;
     }
     local_result * res = new local_result;
-    res->len = result->buf->size();
-    res->buf = result->buf->data();
-    res->_vec = result->buf;
-    res->rows_read = result->rows;
-    res->bytes_read = result->bytes;
-    res->elapsed = result->elapsed;
+    res->result_ = result.release();
     return res;
 }
 
 void free_result(local_result * result)
 {
-    if (!result || !result->_vec)
+    if (!result || result->result_ == nullptr)
     {
         return;
     }
-    std::vector<char> * vec = reinterpret_cast<std::vector<char> *>(result->_vec);
-    delete vec;
-    result->_vec = nullptr;
+    delete result->result_;
+    result->result_ = nullptr;
 }
 
 
@@ -1015,7 +994,7 @@ int mainEntryClickHouseLocal(int argc, char ** argv)
     auto result = pyEntryClickHouseLocal(argc, argv);
     if (result)
     {
-        std::cout << std::string(result->buf->begin(), result->buf->end()) << std::endl;
+        std::cout << result->string() << std::endl;
         return 0;
     }
     else

@@ -30,7 +30,7 @@ public:
         {
             return nullptr;
         }
-        return result->buf;
+        return result->result_->buf_->data() ;
     }
     size_t size()
     {
@@ -38,15 +38,15 @@ public:
         {
             return 0;
         }
-        return result->len;
+        return result->result_->buf_->size();
     }
     py::bytes bytes()
     {
-        if (result == nullptr)
+        if (result == nullptr || result->result_ == nullptr)
         {
             return py::bytes();
         }
-        return py::bytes(result->buf, result->len);
+        return py::bytes(result->result_->buf_->data(), result->result_->buf_->size());
     }
     py::str str()
     {
@@ -54,7 +54,7 @@ public:
         {
             return py::str();
         }
-        return py::str(result->buf, result->len);
+        return py::bytes(result->result_->buf_->data(), result->result_->buf_->size());
     }
     // Query statistics
     size_t rows_read()
@@ -63,7 +63,7 @@ public:
         {
             return 0;
         }
-        return result->rows_read;
+        return result->result_->rows_;
     }
     size_t bytes_read()
     {
@@ -71,7 +71,7 @@ public:
         {
             return 0;
         }
-        return result->bytes_read;
+        return result->result_->bytes_;
     }
     double elapsed()
     {
@@ -79,7 +79,24 @@ public:
         {
             return 0;
         }
-        return result->elapsed;
+        return result->result_->elapsed_;
+    }
+
+    bool has_error()
+    {
+        if (result == nullptr)
+        {
+            return false;
+        }
+        return !result->result_->error_msg_.empty();
+    }
+
+    py::str error_message()
+    {
+        if (has_error()) {
+            return py::str(result->result_->error_msg_.data(), result->result_->error_msg_.size());
+        }
+        return py::str();
     }
 };
 
@@ -90,7 +107,7 @@ private:
 
 public:
     query_result(local_result * result) : result_wrapper(std::make_shared<local_result_wrapper>(result)) { }
-    ~query_result() { }
+    ~query_result() = default;
     char * data() { return result_wrapper->data(); }
     py::bytes bytes() { return result_wrapper->bytes(); }
     py::str str() { return result_wrapper->str(); }
@@ -98,6 +115,11 @@ public:
     size_t rows_read() { return result_wrapper->rows_read(); }
     size_t bytes_read() { return result_wrapper->bytes_read(); }
     double elapsed() { return result_wrapper->elapsed(); }
+
+    bool has_error() { return result_wrapper->has_error(); }
+
+    py::str error_message() { return result_wrapper->error_message(); }
+
     memoryview_wrapper * get_memview();
 };
 

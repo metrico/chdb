@@ -120,6 +120,9 @@ class Connection(object):
             print("DEBUG: query:", sql)
         try:
             import chdb
+            res = chdb.query(sql, output_format="JSON")
+            if res.has_error():
+                raise err.DatabaseError(res.error_message())
             self._resp = chdb.query(sql, output_format="JSON").data()
         except Exception as error:
             raise err.InterfaceError("query err: %s" % error)
