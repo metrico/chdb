@@ -1,15 +1,15 @@
-<div align="left">
-  <img src="docs/_static/snake-chdb.png" height="100">
-</div>
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/_static/snake-chdb-dark.png" height="130">
+  <img src="docs/_static/snake-chdb.png" height="130">
+</picture>
 
 [![Build](https://github.com/auxten/chdb/actions/workflows/build_wheels.yml/badge.svg?branch=main)](https://github.com/auxten/chdb/actions/workflows/build_wheels.yml)
 [![PyPI](https://img.shields.io/pypi/v/chdb.svg)](https://pypi.org/project/chdb/)
 [![Downloads](https://static.pepy.tech/badge/chdb)](https://pepy.tech/project/chdb)
 [![Discord](https://img.shields.io/discord/1098133460310294528?logo=Discord)](https://discord.gg/Njw5YXSPPc)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=social&label=Twitter)](https://twitter.com/auxten)
-<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-5-orange.svg?style=flat-square)](#contributors-)
-<!-- ALL-CONTRIBUTORS-BADGE:END -->
+</div>
 
 # chDB
 
@@ -111,7 +111,8 @@ sess.query(
 print("Select from view:\n")
 print(sess.query("SELECT * FROM db_xxx.view_xxx", "Pretty"))
 ```
-  
+
+see also: [test_stateful.py](tests/test_stateful.py).
 </details>
 
 <details>
@@ -131,6 +132,23 @@ conn1.close()
 ```
 </details>
 
+
+<details>
+    <summary><h4>🗂️ Query with UDF (User Defined Functions)</h4></summary>
+
+```python
+from chdb.udf import chdb_udf
+from chdb import query
+
+@chdb_udf()
+def sum_udf(lhs, rhs):
+    return int(lhs) + int(rhs)
+
+print(query("select sum_udf(12,22)"))
+```
+
+see also: [test_udf.py](tests/test_udf.py).
+</details>
 
 For more examples, see [examples](examples) and [tests](tests).
 
